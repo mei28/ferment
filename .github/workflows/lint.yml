@@ -15,6 +15,7 @@ jobs:
         run: |
           bash -n bin/ferment
           bash -n install.sh
+          bash -n uninstall.sh
 
       - name: shellcheck
         uses: ludeeus/action-shellcheck@master

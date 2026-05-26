@@ -12,9 +12,9 @@ default:
 
 # Syntax-check bash and run shellcheck (warnings or above)
 lint:
-    bash -n bin/ferment install.sh
+    bash -n bin/ferment install.sh uninstall.sh
     @if command -v shellcheck >/dev/null; then \
-        shellcheck -S warning bin/ferment install.sh; \
+        shellcheck -S warning bin/ferment install.sh uninstall.sh; \
     else \
         echo "shellcheck not installed (brew install shellcheck)"; \
     fi

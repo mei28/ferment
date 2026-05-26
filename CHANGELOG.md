@@ -6,7 +6,12 @@ the project tries to follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- `uninstall.sh` — counterpart to `install.sh`. Scans well-known prefixes
+  (`FERMENT_PREFIX`, `~/.local/bin`, `~/bin`, `/usr/local/bin`, and
+  `command -v ferment`), removes the binary and the completions
+  `install.sh` placed, and points Homebrew / nix users at their native
+  uninstall commands. Prompts for confirmation; `FERMENT_FORCE=1` skips.
 
 ## [0.1.0] - 2026-05-26
 

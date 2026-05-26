@@ -35,6 +35,16 @@ curl -fsSL https://raw.githubusercontent.com/mei28/ferment/main/install.sh | sh
 Installs to `~/.local/bin/ferment` by default. Override with
 `FERMENT_PREFIX=/usr/local/bin`, or pin a version with `FERMENT_REF=v0.1.0`.
 
+To remove it again:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mei28/ferment/main/uninstall.sh | sh
+```
+
+The uninstaller asks for confirmation (set `FERMENT_FORCE=1` to skip),
+removes the binary plus the completions it installed, and points
+Homebrew / nix users at `brew uninstall` / `nix profile remove`.
+
 ### nix
 
 ```sh

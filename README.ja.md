@@ -33,6 +33,16 @@ curl -fsSL https://raw.githubusercontent.com/mei28/ferment/main/install.sh | sh
 デフォルトでは `~/.local/bin/ferment` に入ります。設置先は `FERMENT_PREFIX`、
 バージョン固定は `FERMENT_REF=v0.1.0` で上書きできます。
 
+アンインストール:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mei28/ferment/main/uninstall.sh | sh
+```
+
+確認プロンプトが出ます (`FERMENT_FORCE=1` でスキップ可)。バイナリと
+install.sh が置いた補完だけを掃除し、Homebrew / nix 経由の場合は
+`brew uninstall` / `nix profile remove` の案内を出すだけで触りません。
+
 ### nix
 
 ```sh
