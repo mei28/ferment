@@ -1,0 +1,9 @@
+.stub/
+.DS_Store
+*.swp
+*.tmp
+result
+result-*
+/dist/
+docs
+.claude/settings.local.json

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Stub `mutagen` used by ferment's bats tests.
+#
+# Behavior is controlled by env vars so individual tests can shape it
+# without rewriting the binary:
+#
+#   STUB_MUTAGEN_MODE   normal (default) | empty | unsupported
+#       - normal      : `sync list --template` prints two canned rows
+#       - empty       : `sync list --template` prints nothing (no sessions)
+#       - unsupported : `--template` exits non-zero so ferment falls back
+#
+#   STUB_MUTAGEN_LOG    optional path; every invocation appends "$*" to it.
+#                       Tests use this to assert that the right args reached
+#                       mutagen.
+
+set -u
+
+if [ -n "${STUB_MUTAGEN_LOG:-}" ]; then
+  printf '%s\n' "$*" >> "$STUB_MUTAGEN_LOG"
+fi
+
+if [ "${1:-}" = "sync" ] && [ "${2:-}" = "list" ]; then
+  has_template=
+  for arg in "$@"; do
+    if [ "$arg" = "--template" ]; then
+      has_template=1
+      break
+    fi
+  done
+
+  case "${STUB_MUTAGEN_MODE:-normal}" in
+    unsupported)
+      if [ -n "$has_template" ]; then
+        echo "unknown flag --template" >&2
+        exit 1
+      fi
+      echo "Name: myproj-code"
+      echo "Status: Watching for changes"
+      ;;
+    empty)
+      : # template request: print nothing -> ferment shows "no sync sessions"
+      ;;
+    normal|*)
+      if [ -n "$has_template" ]; then
+        printf 'myproj-code|.|user@host:/srv/p|Y|Y|Watching for changes|0|0|0\n'
+        printf 'myproj-assets|./assets|user@host:/srv/p/assets|Y|N|Disconnected|1|0|2\n'
+      else
+        echo "Name: myproj-code"
+        echo "Status: Watching for changes"
+      fi
+      ;;
+  esac
+  exit 0
+fi
+
+# All other invocations succeed silently so dispatch tests can assert
+# *what* was forwarded without dealing with mock output.
+exit 0

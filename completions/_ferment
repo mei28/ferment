@@ -1,0 +1,61 @@
+#compdef ferment
+# zsh completion for ferment
+# Install: place in a directory on $fpath, e.g. ~/.zsh/completions/_ferment
+#          and ensure `autoload -Uz compinit && compinit` runs in .zshrc.
+
+_ferment() {
+  local -a subcmds
+  subcmds=(
+    'help:show help'
+    'version:show version'
+    'init:create ferment.yml template in cwd'
+    'up:start project (mutagen project start)'
+    'start:alias of up'
+    'down:terminate project'
+    'stop:alias of down'
+    'reload:down then up'
+    'restart:alias of reload'
+    'st:colored 1-line status summary'
+    'status:alias of st'
+    'ls:alias of st'
+    'list:alias of st'
+    'watch:re-render st every 2 seconds'
+    'mon:mutagen sync monitor (raw stream)'
+    'monitor:alias of mon'
+    'why:per-session details (conflicts, problems)'
+    'long:alias of why'
+    'flush:flush sessions (default --all)'
+    'pause:pause sessions (default --all)'
+    'resume:resume sessions (default --all)'
+    'reset:reset sessions (default --all)'
+    'pick:fzf-pick a session name'
+    'edit:open project file in $EDITOR'
+    'path:print absolute path of project file'
+    'daemon:show mutagen daemon status'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe -t subcommands 'ferment subcommand' subcmds
+    return
+  fi
+
+  local cmd="${words[2]}"
+  case "$cmd" in
+    flush|pause|resume|reset|why|long)
+      _ferment_sessions
+      ;;
+  esac
+}
+
+_ferment_sessions() {
+  local -a sessions
+  if command -v mutagen >/dev/null 2>&1; then
+    sessions=(${(f)"$(mutagen sync list --template '{{range .}}{{.Name}}
+{{end}}' 2>/dev/null)"})
+    if (( ${#sessions} )); then
+      _describe -t sessions 'sync session' sessions
+    fi
+  fi
+}
+
+_ferment "$@"

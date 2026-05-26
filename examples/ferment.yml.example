@@ -1,0 +1,62 @@
+# ferment project file (example)
+# Drop this into your project root as `ferment.yml`.
+# Compatible with `mutagen project` — the schema is Mutagen's.
+#
+#   ferment up      # start all syncs below
+#   ferment st      # 1-line color summary
+#   ferment down    # stop them
+
+sync:
+  defaults:
+    mode: two-way-resolved
+    ignore:
+      vcs: true
+      paths:
+        - .DS_Store
+        - node_modules
+        - .venv
+        - __pycache__
+        - .pytest_cache
+        - .mypy_cache
+        - .next
+        - dist
+        - build
+        - target
+        - .gradle
+        - .idea
+        - .vscode
+        - "*.swp"
+        - "*.tmp"
+        - "*.log"
+    permissions:
+      defaultFileMode: 0644
+      defaultDirectoryMode: 0755
+    symlink:
+      mode: portable
+    watch:
+      mode: portable
+      pollingInterval: 10
+    flushOnCreate: true
+
+  myproj-code:
+    alpha: "."
+    beta: "dev@my-remote:/srv/myproj"
+
+  myproj-assets:
+    alpha: "./assets"
+    beta: "dev@my-remote:/srv/myproj/assets"
+    mode: one-way-safe
+    ignore:
+      paths:
+        - "*.raw"
+
+  # Docker / mutagen-compose:
+  # myproj-docker:
+  #   alpha: "."
+  #   beta: "docker://myproj-app/app"
+
+# Hooks (optional):
+# beforeCreate:
+#   - echo "[ferment] starting myproj"
+# afterTerminate:
+#   - echo "[ferment] stopped myproj"

@@ -1,0 +1,315 @@
+#!/usr/bin/env bash
+# ferment — a thin Mutagen wrapper that ferments your file changes.
+#
+# https://github.com/mei28/ferment
+#
+# Goals:
+#   - Short subcommands instead of "mutagen sync ..." / "mutagen project ..."
+#   - One pretty status line per session (connected? syncing? conflicts?)
+#   - Works on top of `mutagen project` (ferment.yml or mutagen.yml).
+#
+# Naming: mutagen = "agent that causes mutation". ferment = "agent that
+# causes (slow, biological) change". A wrapper that quietly ferments
+# your file changes into propagation across hosts.
+#
+# License: MIT
+
+set -euo pipefail
+
+VERSION="0.1.0"
+SELF="$(basename "${0}")"
+
+# ---------- ui ----------
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET=""; C_BOLD=""; C_DIM=""
+  C_RED=""; C_GREEN=""; C_YELLOW=""; C_BLUE=""; C_CYAN=""
+fi
+
+err()  { printf "%serror:%s %s\n" "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+info() { printf "%s->%s %s\n"     "$C_BLUE" "$C_RESET" "$*"; }
+ok()   { printf "%s✓%s %s\n"      "$C_GREEN" "$C_RESET" "$*"; }
+warn() { printf "%s!%s %s\n"      "$C_YELLOW" "$C_RESET" "$*"; }
+
+need() { command -v "$1" >/dev/null 2>&1 || err "$1 not found on PATH"; }
+need mutagen
+
+# Locate the project file. ferment.yml is preferred; mutagen.yml accepted
+# for compatibility. When found, the path is stored in $project_file and
+# (for non-default names) passed to `mutagen project` via --project-file.
+project_file=""
+locate_project() {
+  if   [ -f ferment.yml  ]; then project_file="ferment.yml"
+  elif [ -f ferment.yaml ]; then project_file="ferment.yaml"
+  elif [ -f mutagen.yml  ]; then project_file="mutagen.yml"
+  elif [ -f mutagen.yaml ]; then project_file="mutagen.yaml"
+  else                           project_file=""
+  fi
+}
+
+# ---------- help ----------
+
+cmd_help() {
+  cat <<EOF
+${C_BOLD}${SELF}${C_RESET} v${VERSION} — a thin Mutagen wrapper for daily use
+${C_DIM}https://github.com/mei28/ferment${C_RESET}
+
+${C_BOLD}Usage:${C_RESET} ${SELF} <subcommand> [args]
+
+${C_BOLD}Project${C_RESET} (operates on cwd's ferment.yml / mutagen.yml)
+  ${C_CYAN}init${C_RESET} [name]      generate a ferment.yml template
+  ${C_CYAN}up${C_RESET}               start the project   (mutagen project start)
+  ${C_CYAN}down${C_RESET}             terminate the project (mutagen project terminate)
+  ${C_CYAN}reload${C_RESET}           down then up
+
+${C_BOLD}Status${C_RESET}
+  ${C_CYAN}st${C_RESET}               colored one-line status summary
+  ${C_CYAN}watch${C_RESET}            re-render st every 2 seconds
+  ${C_CYAN}mon${C_RESET}              raw mutagen sync monitor stream
+  ${C_CYAN}why${C_RESET} [session]    detail view (conflicts / problems / scan stats)
+
+${C_BOLD}Sync ops${C_RESET}
+  ${C_CYAN}flush${C_RESET} [session]  flush now (defaults to --all)
+  ${C_CYAN}pause${C_RESET} [session]  pause     (defaults to --all)
+  ${C_CYAN}resume${C_RESET} [session] resume    (defaults to --all)
+  ${C_CYAN}reset${C_RESET} [session]  reset     (defaults to --all)
+  ${C_CYAN}pick${C_RESET}             fzf-pick a session name (to stdout)
+
+${C_BOLD}Config${C_RESET}
+  ${C_CYAN}edit${C_RESET}             open the project file in \$EDITOR
+  ${C_CYAN}path${C_RESET}             print absolute path of the project file
+  ${C_CYAN}daemon${C_RESET}           show mutagen daemon status
+
+${C_DIM}Suggested alias: alias f=${SELF}${C_RESET}
+EOF
+}
+
+# ---------- commands ----------
+
+cmd_init() {
+  local name="${1:-$(basename "$PWD")}"
+  if [ -f ferment.yml ] || [ -f ferment.yaml ] || [ -f mutagen.yml ] || [ -f mutagen.yaml ]; then
+    err "a project file already exists (ferment.yml / mutagen.yml)"
+  fi
+  cat > ferment.yml <<EOF
+# ferment project: ${name}
+# docs: https://github.com/mei28/ferment
+# upstream: https://mutagen.io/documentation/orchestration/projects
+#
+# Quick start:
+#   ferment up      # start
+#   ferment st      # status
+#   ferment down    # stop
+#
+# Edit alpha/beta below to match your environment.
+
+sync:
+  defaults:
+    mode: two-way-resolved
+    ignore:
+      vcs: true
+      paths:
+        - .DS_Store
+        - .git
+        - node_modules
+        - .venv
+        - __pycache__
+        - .pytest_cache
+        - .mypy_cache
+        - .idea
+        - .vscode
+        - "*.swp"
+        - "*.tmp"
+    permissions:
+      defaultFileMode: 0644
+      defaultDirectoryMode: 0755
+    symlink:
+      mode: portable
+    watch:
+      mode: portable
+      pollingInterval: 10
+    flushOnCreate: true
+
+  ${name}-code:
+    alpha: "."
+    beta: "user@host:/srv/${name}"
+
+# beforeCreate:   ["echo [ferment] starting ${name}"]
+# afterTerminate: ["echo [ferment] stopped ${name}"]
+EOF
+  ok "created ferment.yml (project: ${name})"
+  info "edit alpha/beta: ${C_CYAN}${SELF} edit${C_RESET}"
+  info "start it:        ${C_CYAN}${SELF} up${C_RESET}"
+}
+
+cmd_up() {
+  locate_project
+  if [ -z "$project_file" ]; then
+    warn "no project file in cwd. Create one with: ${SELF} init"
+    exit 1
+  fi
+  # `mutagen project` auto-discovers mutagen.yml; for ferment.yml we must
+  # pass --project-file explicitly.
+  case "$project_file" in
+    mutagen.yml|mutagen.yaml) mutagen project start ;;
+    *)                        mutagen project start --project-file "$project_file" ;;
+  esac
+  ok "project started"
+  cmd_st || true
+}
+
+cmd_down() {
+  locate_project
+  case "$project_file" in
+    ""|mutagen.yml|mutagen.yaml) mutagen project terminate || true ;;
+    *)                           mutagen project terminate --project-file "$project_file" || true ;;
+  esac
+  ok "project terminated"
+}
+
+cmd_reload() {
+  cmd_down
+  cmd_up
+}
+
+# Pretty one-line status. Uses --template so column widths don't matter.
+cmd_st() {
+  local tmpl
+  tmpl='{{range .}}{{.Name}}|{{.Alpha.URL}}|{{.Beta.URL}}|{{if .Alpha.Connected}}Y{{else}}N{{end}}|{{if .Beta.Connected}}Y{{else}}N{{end}}|{{.Status}}|{{len .Conflicts}}|{{len .AlphaState.Problems}}|{{len .BetaState.Problems}}
+{{end}}'
+
+  local out
+  if ! out=$(mutagen sync list --template "$tmpl" 2>/dev/null); then
+    warn "this mutagen version doesn't support --template; falling back to raw output"
+    mutagen sync list
+    return
+  fi
+
+  if [ -z "$out" ]; then
+    warn "no sync sessions  (start with '${SELF} up' or 'mutagen sync create ...')"
+    return
+  fi
+
+  printf "%s%-24s %-3s %-3s %-26s %-4s %-4s %s%s\n" \
+    "$C_BOLD" "NAME" "A" "B" "STATUS" "CFL" "PRB" "ALPHA <-> BETA" "$C_RESET"
+
+  while IFS='|' read -r name aurl burl ac bc status conflicts ap bp; do
+    [ -z "$name" ] && continue
+
+    local ac_s bc_s cfl_s prb_s status_c
+    if [ "$ac" = "Y" ]; then ac_s="${C_GREEN}✓${C_RESET}"; else ac_s="${C_RED}✗${C_RESET}"; fi
+    if [ "$bc" = "Y" ]; then bc_s="${C_GREEN}✓${C_RESET}"; else bc_s="${C_RED}✗${C_RESET}"; fi
+
+    if [ "${conflicts:-0}" -gt 0 ] 2>/dev/null; then
+      cfl_s="${C_RED}${conflicts}${C_RESET}"
+    else
+      cfl_s="${C_DIM}0${C_RESET}"
+    fi
+
+    local prb=$(( ${ap:-0} + ${bp:-0} ))
+    if [ "$prb" -gt 0 ]; then
+      prb_s="${C_RED}${prb}${C_RESET}"
+    else
+      prb_s="${C_DIM}0${C_RESET}"
+    fi
+
+    case "$status" in
+      *atching*)                                     status_c="${C_GREEN}${status}${C_RESET}" ;;
+      *canning*|*taging*|*econciling*|*pplying*|*ransitioning*|*aving*)
+                                                     status_c="${C_YELLOW}${status}${C_RESET}" ;;
+      *aused*|*alted*|*isconnected*|*error*|*Error*) status_c="${C_RED}${status}${C_RESET}" ;;
+      *)                                             status_c="$status" ;;
+    esac
+
+    printf "%-24s %b   %b   %b %b %b %s %s<->%s %s\n" \
+      "$name" "$ac_s" "$bc_s" "$status_c" "$cfl_s" "$prb_s" \
+      "$aurl" "$C_DIM" "$C_RESET" "$burl"
+  done <<< "$out"
+}
+
+cmd_watch() {
+  trap 'tput cnorm 2>/dev/null || true; exit 0' INT TERM
+  tput civis 2>/dev/null || true
+  while true; do
+    clear
+    printf "%s%s%s   %sCtrl-C to exit%s\n\n" "$C_DIM" "$(date '+%Y-%m-%d %H:%M:%S')" "$C_RESET" "$C_DIM" "$C_RESET"
+    cmd_st || true
+    sleep 2
+  done
+}
+
+cmd_mon()    { mutagen sync monitor "$@"; }
+cmd_why()    { mutagen sync list --long "$@"; }
+cmd_edit()   {
+  locate_project
+  if [ -z "$project_file" ]; then err "no project file found (create one with: ${SELF} init)"; fi
+  ${EDITOR:-vi} "$project_file"
+}
+cmd_path()   {
+  locate_project
+  if [ -z "$project_file" ]; then warn "no project file found"; exit 1; fi
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$project_file"
+  else
+    printf "%s/%s\n" "$PWD" "$project_file"
+  fi
+}
+cmd_daemon() { mutagen daemon status 2>/dev/null || mutagen daemon status || true; }
+
+generic_op() {
+  local op="$1"; shift
+  if [ "$#" -eq 0 ]; then
+    mutagen sync "$op" --all
+    ok "${op} all sessions"
+  else
+    mutagen sync "$op" "$@"
+    ok "${op} $*"
+  fi
+}
+
+cmd_flush()  { generic_op flush  "$@"; }
+cmd_pause()  { generic_op pause  "$@"; }
+cmd_resume() { generic_op resume "$@"; }
+cmd_reset()  { generic_op reset  "$@"; }
+
+cmd_pick() {
+  need fzf
+  mutagen sync list --template '{{range .}}{{.Name}}
+{{end}}' | fzf --prompt="session > "
+}
+
+# ---------- dispatch ----------
+
+sub="${1:-help}"
+shift || true
+
+case "$sub" in
+  help|-h|--help|"")             cmd_help ;;
+  version|-V|--version)          echo "${SELF} ${VERSION}" ;;
+  init)                          cmd_init "$@" ;;
+  up|start)                      cmd_up ;;
+  down|stop|term|terminate)      cmd_down ;;
+  reload|restart)                cmd_reload ;;
+  st|status|ls|list)             cmd_st ;;
+  watch|w)                       cmd_watch ;;
+  mon|monitor)                   cmd_mon "$@" ;;
+  why|long|detail)               cmd_why "$@" ;;
+  flush|f|sync)                  cmd_flush "$@" ;;
+  pause)                         cmd_pause "$@" ;;
+  resume)                        cmd_resume "$@" ;;
+  reset)                         cmd_reset "$@" ;;
+  pick)                          cmd_pick ;;
+  edit|e)                        cmd_edit ;;
+  path)                          cmd_path ;;
+  daemon)                        cmd_daemon ;;
+  *) err "unknown subcommand: $sub  (try '${SELF} help')" ;;
+esac

@@ -1,0 +1,86 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # for creating GitHub Releases and committing back
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: extract release metadata
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          TARBALL="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${VERSION}.tar.gz"
+          echo "version=${VERSION}"   >> "$GITHUB_OUTPUT"
+          echo "tarball=${TARBALL}"   >> "$GITHUB_OUTPUT"
+
+      - name: download tarball and compute sha256
+        id: checksum
+        run: |
+          set -eu
+          URL="${{ steps.meta.outputs.tarball }}"
+          # Tag tarballs may not be available the moment the tag is pushed;
+          # retry briefly.
+          for i in 1 2 3 4 5; do
+            if curl -fsSL -o /tmp/release.tar.gz "$URL"; then break; fi
+            sleep $((i * 2))
+          done
+          SHA=$(shasum -a 256 /tmp/release.tar.gz | awk '{print $1}')
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Computed sha256: $SHA"
+
+      - name: create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sh
+            ```
+
+            ## Homebrew formula update (auto-applied to `Formula/ferment.rb`)
+
+            ```
+            url    "${{ steps.meta.outputs.tarball }}"
+            sha256 "${{ steps.checksum.outputs.sha256 }}"
+            ```
+
+      - name: bump Formula/ferment.rb on main
+        env:
+          NEW_URL: ${{ steps.meta.outputs.tarball }}
+          NEW_SHA: ${{ steps.checksum.outputs.sha256 }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Switch to main so we can commit the formula update.
+          git fetch origin main
+          git checkout main
+
+          FORMULA=Formula/ferment.rb
+          # Update only the first `url` line and the first `sha256` line.
+          sed -i -E "0,/^  url \".*\"/{s|^  url \".*\"|  url \"${NEW_URL}\"|}" "$FORMULA"
+          sed -i -E "0,/^  sha256 \".*\"/{s|^  sha256 \".*\"|  sha256 \"${NEW_SHA}\"|}" "$FORMULA"
+
+          if git diff --quiet "$FORMULA"; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+
+          git add "$FORMULA"
+          git commit -m "chore(formula): bump to ${VERSION}"
+          git push origin main
