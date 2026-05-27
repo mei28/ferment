@@ -107,7 +107,11 @@ cat <<EOF
 ${B}Next steps:${R}
   ${B}1.${R} Install mutagen if you haven't:
        brew install mutagen-io/mutagen/mutagen
-  ${B}2.${R} In a project directory:
+  ${B}2.${R} (Re)install shell completions any time with:
+       ferment completion bash > ~/.local/share/bash-completion/completions/ferment
+       ferment completion zsh  > ~/.zsh/completions/_ferment
+       ferment completion fish > ~/.config/fish/completions/ferment.fish
+  ${B}3.${R} In a project directory:
        ferment init
        ferment edit     # tweak alpha/beta
        ferment up

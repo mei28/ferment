@@ -1,29 +1,25 @@
 #compdef ferment
 # zsh completion for ferment
-# Install: place in a directory on $fpath, e.g. ~/.zsh/completions/_ferment
-#          and ensure `autoload -Uz compinit && compinit` runs in .zshrc.
+# Install:
+#   ferment completion zsh > "${fpath[1]}/_ferment"
+# or
+#   eval "$(ferment completion zsh)"
 
 _ferment() {
-  local -a subcmds
-  subcmds=(
+  local curcontext="$curcontext" state line
+  typeset -A opt_args
+
+  local -a subcmds=(
     'help:show help'
     'version:show version'
     'init:create ferment.yml template in cwd'
     'up:start project (mutagen project start)'
-    'start:alias of up'
     'down:terminate project'
-    'stop:alias of down'
     'reload:down then up'
-    'restart:alias of reload'
     'st:colored 1-line status summary'
-    'status:alias of st'
-    'ls:alias of st'
-    'list:alias of st'
     'watch:re-render st every 2 seconds'
     'mon:mutagen sync monitor (raw stream)'
-    'monitor:alias of mon'
     'why:per-session details (conflicts, problems)'
-    'long:alias of why'
     'flush:flush sessions (default --all)'
     'pause:pause sessions (default --all)'
     'resume:resume sessions (default --all)'
@@ -32,17 +28,29 @@ _ferment() {
     'edit:open project file in $EDITOR'
     'path:print absolute path of project file'
     'daemon:show mutagen daemon status'
+    'completion:print shell completion script'
   )
 
-  if (( CURRENT == 2 )); then
-    _describe -t subcommands 'ferment subcommand' subcmds
-    return
-  fi
+  _arguments -C \
+    '(-h --help)'{-h,--help}'[show help]' \
+    '(-V --version)'{-V,--version}'[show version]' \
+    '(-v --verbose)'{-v,--verbose}'[print mutagen commands as they run]' \
+    '1: :->cmd' \
+    '*:: :->args' && return 0
 
-  local cmd="${words[2]}"
-  case "$cmd" in
-    flush|pause|resume|reset|why|long)
-      _ferment_sessions
+  case $state in
+    cmd)
+      _describe -t commands 'ferment subcommand' subcmds
+      ;;
+    args)
+      case $line[1] in
+        flush|f|sync|pause|resume|reset|why|long|detail|mon|monitor)
+          _ferment_sessions
+          ;;
+        completion)
+          _values 'shell' bash zsh fish
+          ;;
+      esac
       ;;
   esac
 }

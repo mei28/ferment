@@ -115,6 +115,47 @@ myproj-assets           ✓   ✗   Disconnected          0    1    ./assets <->
 | `ferment edit` | open project file in `$EDITOR` |
 | `ferment path` | print absolute path of the project file |
 | `ferment daemon` | `mutagen daemon status` |
+| `ferment completion <shell>` | print a `bash` / `zsh` / `fish` completion script |
+
+### Global flags
+
+- `-v`, `--verbose` — echo each underlying `mutagen` invocation before
+  running it. Useful when you want to see exactly what ferment is
+  delegating to. Works in any position:
+
+  ```sh
+  ferment -v flush
+  ferment flush --verbose
+  ```
+
+  Sample output:
+
+  ```
+  $ mutagen sync flush --all
+  ✓ flush all sessions
+  ```
+
+## Shell completions
+
+`ferment` ships completions for bash, zsh, and fish. The installer drops
+them into the usual locations automatically, but you can (re)install or
+update them any time:
+
+```sh
+# bash
+ferment completion bash > ~/.local/share/bash-completion/completions/ferment
+
+# zsh — write into a directory on $fpath, then re-run compinit
+ferment completion zsh > "${fpath[1]}/_ferment"
+
+# fish
+ferment completion fish > ~/.config/fish/completions/ferment.fish
+```
+
+The completion suggests subcommands, the `-v` / `--help` / `--version`
+flags, the `bash` / `zsh` / `fish` arguments to `ferment completion`,
+and live session names for `flush` / `pause` / `resume` / `reset` /
+`mon` / `why`.
 
 ## direnv integration
 
@@ -134,11 +175,17 @@ keep alive. Stop deliberately with `ferment down`.
 ## Development
 
 ```sh
-just                # list recipes
-just lint           # bash -n + shellcheck
-just smoke          # stub mutagen, run a handful of subcommands
-just release-prep   # print the release checklist for the current version
+just                     # list recipes
+just lint                # bash -n + shellcheck
+just test                # bats integration tests
+just smoke               # stub mutagen, run a handful of subcommands
+just regen-completions   # regenerate completions/ from the embedded source in bin/ferment
+just release-prep        # print the release checklist for the current version
 ```
+
+The completion scripts under `completions/` are generated artifacts.
+Edit the embedded heredocs in `bin/ferment` (`cmd_completion`), then run
+`just regen-completions` to refresh the static files.
 
 ## License
 
