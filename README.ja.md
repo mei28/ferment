@@ -116,6 +116,45 @@ myproj-assets           ✓   ✗   Disconnected          0    1    ./assets <->
 | `ferment edit` | `$EDITOR` で project ファイル |
 | `ferment path` | project ファイルの絶対パス |
 | `ferment daemon` | `mutagen daemon status` |
+| `ferment completion <shell>` | `bash` / `zsh` / `fish` の補完スクリプトを出力 |
+
+### グローバルフラグ
+
+- `-v`, `--verbose` — 実行する `mutagen` のコマンドラインを 1 行だけ
+  先に表示します。サブコマンドの前後どちらでも置けます。
+
+  ```sh
+  ferment -v flush
+  ferment flush --verbose
+  ```
+
+  出力例:
+
+  ```
+  $ mutagen sync flush --all
+  ✓ flush all sessions
+  ```
+
+## シェル補完
+
+`ferment` は bash / zsh / fish の補完スクリプトを内蔵しています。
+インストーラが自動で配置しますが、後から差し替えるときは:
+
+```sh
+# bash
+ferment completion bash > ~/.local/share/bash-completion/completions/ferment
+
+# zsh — $fpath 配下に置いて compinit を再実行
+ferment completion zsh > "${fpath[1]}/_ferment"
+
+# fish
+ferment completion fish > ~/.config/fish/completions/ferment.fish
+```
+
+補完されるもの: サブコマンド、`-v` / `--help` / `--version` などの
+グローバルフラグ、`ferment completion` の引数 (`bash` / `zsh` / `fish`)、
+`flush` / `pause` / `resume` / `reset` / `mon` / `why` でのセッション名
+(mutagen が稼働中であれば動的に取得)。
 
 ## direnv 連携
 
@@ -132,11 +171,17 @@ fi
 ## 開発
 
 ```sh
-just                # レシピ一覧
-just lint           # bash -n + shellcheck
-just smoke          # スタブ環境で動作確認
-just release-prep   # リリース手順の表示
+just                     # レシピ一覧
+just lint                # bash -n + shellcheck
+just test                # bats による統合テスト
+just smoke               # スタブ環境で動作確認
+just regen-completions   # bin/ferment 内の補完を completions/ に書き出す
+just release-prep        # リリース手順の表示
 ```
+
+`completions/` 配下のファイルは生成物です。補完ロジックを直すときは
+`bin/ferment` の `cmd_completion` 内の heredoc を編集し、
+`just regen-completions` で再生成してください。
 
 ## ライセンス
 

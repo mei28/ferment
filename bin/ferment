@@ -18,6 +18,11 @@ set -euo pipefail
 
 VERSION="0.1.0"
 SELF="$(basename "${0}")"
+VERBOSE=0
+
+# Preserve a handle to the *original* stderr so `-v` output isn't swallowed
+# by per-call `2>/dev/null` redirections inside the script (e.g. in $(...)).
+exec 9>&2
 
 # ---------- ui ----------
 
@@ -41,7 +46,20 @@ ok()   { printf "%s✓%s %s\n"      "$C_GREEN" "$C_RESET" "$*"; }
 warn() { printf "%s!%s %s\n"      "$C_YELLOW" "$C_RESET" "$*"; }
 
 need() { command -v "$1" >/dev/null 2>&1 || err "$1 not found on PATH"; }
-need mutagen
+# Note: `need mutagen` is enforced per-subcommand in dispatch so that
+# offline-friendly commands (`help`, `version`, `init`, `completion`) work
+# before mutagen is installed.
+
+# Wrap external command invocations. With -v, prints the command line to the
+# original stderr (FD 9) before exec; otherwise behaves like a transparent
+# pass-through. Using FD 9 keeps the trace visible even when callers redirect
+# stderr (e.g. `out=$(run mutagen ... 2>/dev/null)`).
+run() {
+  if [ "$VERBOSE" = "1" ]; then
+    printf "%s\$%s %s\n" "$C_DIM" "$C_RESET" "$*" >&9
+  fi
+  "$@"
+}
 
 # Locate the project file. ferment.yml is preferred; mutagen.yml accepted
 # for compatibility. When found, the path is stored in $project_file and
@@ -63,7 +81,7 @@ cmd_help() {
 ${C_BOLD}${SELF}${C_RESET} v${VERSION} — a thin Mutagen wrapper for daily use
 ${C_DIM}https://github.com/mei28/ferment${C_RESET}
 
-${C_BOLD}Usage:${C_RESET} ${SELF} <subcommand> [args]
+${C_BOLD}Usage:${C_RESET} ${SELF} [-v] <subcommand> [args]
 
 ${C_BOLD}Project${C_RESET} (operates on cwd's ferment.yml / mutagen.yml)
   ${C_CYAN}init${C_RESET} [name]      generate a ferment.yml template
@@ -88,6 +106,10 @@ ${C_BOLD}Config${C_RESET}
   ${C_CYAN}edit${C_RESET}             open the project file in \$EDITOR
   ${C_CYAN}path${C_RESET}             print absolute path of the project file
   ${C_CYAN}daemon${C_RESET}           show mutagen daemon status
+  ${C_CYAN}completion${C_RESET} <sh>  print shell completion script (bash|zsh|fish)
+
+${C_BOLD}Global flags${C_RESET}
+  ${C_CYAN}-v${C_RESET}, ${C_CYAN}--verbose${C_RESET}    echo each mutagen invocation before running it
 
 ${C_DIM}Suggested alias: alias f=${SELF}${C_RESET}
 EOF
@@ -160,8 +182,8 @@ cmd_up() {
   # `mutagen project` auto-discovers mutagen.yml; for ferment.yml we must
   # pass --project-file explicitly.
   case "$project_file" in
-    mutagen.yml|mutagen.yaml) mutagen project start ;;
-    *)                        mutagen project start --project-file "$project_file" ;;
+    mutagen.yml|mutagen.yaml) run mutagen project start ;;
+    *)                        run mutagen project start --project-file "$project_file" ;;
   esac
   ok "project started"
   cmd_st || true
@@ -170,8 +192,8 @@ cmd_up() {
 cmd_down() {
   locate_project
   case "$project_file" in
-    ""|mutagen.yml|mutagen.yaml) mutagen project terminate || true ;;
-    *)                           mutagen project terminate --project-file "$project_file" || true ;;
+    ""|mutagen.yml|mutagen.yaml) run mutagen project terminate || true ;;
+    *)                           run mutagen project terminate --project-file "$project_file" || true ;;
   esac
   ok "project terminated"
 }
@@ -188,9 +210,9 @@ cmd_st() {
 {{end}}'
 
   local out
-  if ! out=$(mutagen sync list --template "$tmpl" 2>/dev/null); then
+  if ! out=$(run mutagen sync list --template "$tmpl" 2>/dev/null); then
     warn "this mutagen version doesn't support --template; falling back to raw output"
-    mutagen sync list
+    run mutagen sync list
     return
   fi
 
@@ -247,8 +269,8 @@ cmd_watch() {
   done
 }
 
-cmd_mon()    { mutagen sync monitor "$@"; }
-cmd_why()    { mutagen sync list --long "$@"; }
+cmd_mon()    { run mutagen sync monitor "$@"; }
+cmd_why()    { run mutagen sync list --long "$@"; }
 cmd_edit()   {
   locate_project
   if [ -z "$project_file" ]; then err "no project file found (create one with: ${SELF} init)"; fi
@@ -263,15 +285,15 @@ cmd_path()   {
     printf "%s/%s\n" "$PWD" "$project_file"
   fi
 }
-cmd_daemon() { mutagen daemon status 2>/dev/null || mutagen daemon status || true; }
+cmd_daemon() { run mutagen daemon status 2>/dev/null || run mutagen daemon status || true; }
 
 generic_op() {
   local op="$1"; shift
   if [ "$#" -eq 0 ]; then
-    mutagen sync "$op" --all
+    run mutagen sync "$op" --all
     ok "${op} all sessions"
   else
-    mutagen sync "$op" "$@"
+    run mutagen sync "$op" "$@"
     ok "${op} $*"
   fi
 }
@@ -283,14 +305,229 @@ cmd_reset()  { generic_op reset  "$@"; }
 
 cmd_pick() {
   need fzf
-  mutagen sync list --template '{{range .}}{{.Name}}
+  run mutagen sync list --template '{{range .}}{{.Name}}
 {{end}}' | fzf --prompt="session > "
+}
+
+# ---------- completion ----------
+#
+# Source of truth for shell completion. The static files under completions/
+# are generated from this (see `just regen-completions`). The body of each
+# branch is a heredoc with single-quoted delimiter so `$`, backticks etc.
+# are emitted literally.
+
+cmd_completion() {
+  local shell="${1:-}"
+  case "$shell" in
+    bash) cat <<'__FERMENT_BASH_COMPLETION__'
+# bash completion for ferment
+# Install:
+#   ferment completion bash > ~/.local/share/bash-completion/completions/ferment
+# or
+#   source <(ferment completion bash)
+
+_ferment() {
+  local cur prev words cword
+  if declare -F _init_completion >/dev/null 2>&1; then
+    _init_completion || return
+  else
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    words=("${COMP_WORDS[@]}")
+    cword=$COMP_CWORD
+  fi
+
+  local subcmds="help version init up down reload st watch mon why \
+flush pause resume reset pick edit path daemon completion"
+  local global_flags="-v --verbose -h --help -V --version"
+
+  # Walk all words before the cursor and pick the first non-flag token as
+  # the subcommand. This makes `-v` etc. positionally independent.
+  local sub="" i
+  for (( i=1; i<cword; i++ )); do
+    case "${words[i]}" in
+      -v|--verbose|-h|--help|-V|--version) continue ;;
+      -*) continue ;;
+      *) sub="${words[i]}"; break ;;
+    esac
+  done
+
+  if [ -z "$sub" ]; then
+    case "$cur" in
+      -*) COMPREPLY=( $(compgen -W "$global_flags" -- "$cur") ) ;;
+      *)  COMPREPLY=( $(compgen -W "$subcmds" -- "$cur") ) ;;
+    esac
+    return 0
+  fi
+
+  case "$sub" in
+    flush|f|sync|pause|resume|reset|why|long|detail|mon|monitor)
+      if command -v mutagen >/dev/null 2>&1; then
+        local sessions
+        sessions=$(mutagen sync list --template '{{range .}}{{.Name}}
+{{end}}' 2>/dev/null)
+        COMPREPLY=( $(compgen -W "$sessions" -- "$cur") )
+      fi
+      ;;
+    completion)
+      COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+      ;;
+  esac
+}
+
+complete -F _ferment ferment
+__FERMENT_BASH_COMPLETION__
+      ;;
+    zsh) cat <<'__FERMENT_ZSH_COMPLETION__'
+#compdef ferment
+# zsh completion for ferment
+# Install:
+#   ferment completion zsh > "${fpath[1]}/_ferment"
+# or
+#   eval "$(ferment completion zsh)"
+
+_ferment() {
+  local curcontext="$curcontext" state line
+  typeset -A opt_args
+
+  local -a subcmds=(
+    'help:show help'
+    'version:show version'
+    'init:create ferment.yml template in cwd'
+    'up:start project (mutagen project start)'
+    'down:terminate project'
+    'reload:down then up'
+    'st:colored 1-line status summary'
+    'watch:re-render st every 2 seconds'
+    'mon:mutagen sync monitor (raw stream)'
+    'why:per-session details (conflicts, problems)'
+    'flush:flush sessions (default --all)'
+    'pause:pause sessions (default --all)'
+    'resume:resume sessions (default --all)'
+    'reset:reset sessions (default --all)'
+    'pick:fzf-pick a session name'
+    'edit:open project file in $EDITOR'
+    'path:print absolute path of project file'
+    'daemon:show mutagen daemon status'
+    'completion:print shell completion script'
+  )
+
+  _arguments -C \
+    '(-h --help)'{-h,--help}'[show help]' \
+    '(-V --version)'{-V,--version}'[show version]' \
+    '(-v --verbose)'{-v,--verbose}'[print mutagen commands as they run]' \
+    '1: :->cmd' \
+    '*:: :->args' && return 0
+
+  case $state in
+    cmd)
+      _describe -t commands 'ferment subcommand' subcmds
+      ;;
+    args)
+      case $line[1] in
+        flush|f|sync|pause|resume|reset|why|long|detail|mon|monitor)
+          _ferment_sessions
+          ;;
+        completion)
+          _values 'shell' bash zsh fish
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_ferment_sessions() {
+  local -a sessions
+  if command -v mutagen >/dev/null 2>&1; then
+    sessions=(${(f)"$(mutagen sync list --template '{{range .}}{{.Name}}
+{{end}}' 2>/dev/null)"})
+    if (( ${#sessions} )); then
+      _describe -t sessions 'sync session' sessions
+    fi
+  fi
+}
+
+_ferment "$@"
+__FERMENT_ZSH_COMPLETION__
+      ;;
+    fish) cat <<'__FERMENT_FISH_COMPLETION__'
+# fish completion for ferment
+# Install:
+#   ferment completion fish > ~/.config/fish/completions/ferment.fish
+
+complete -c ferment -f
+
+# Global flags (available before subcommand)
+complete -c ferment -s v -l verbose -d "Print mutagen commands as they run"
+complete -c ferment -s h -l help    -d "Show help"
+complete -c ferment -s V -l version -d "Show version"
+
+# Subcommand suggestions when none seen yet
+complete -c ferment -n "__fish_use_subcommand" -a help       -d "show help"
+complete -c ferment -n "__fish_use_subcommand" -a version    -d "show version"
+complete -c ferment -n "__fish_use_subcommand" -a init       -d "create ferment.yml template"
+complete -c ferment -n "__fish_use_subcommand" -a up         -d "start project"
+complete -c ferment -n "__fish_use_subcommand" -a down       -d "terminate project"
+complete -c ferment -n "__fish_use_subcommand" -a reload     -d "down then up"
+complete -c ferment -n "__fish_use_subcommand" -a st         -d "1-line status summary"
+complete -c ferment -n "__fish_use_subcommand" -a watch      -d "live st (2s refresh)"
+complete -c ferment -n "__fish_use_subcommand" -a mon        -d "mutagen sync monitor"
+complete -c ferment -n "__fish_use_subcommand" -a why        -d "per-session details"
+complete -c ferment -n "__fish_use_subcommand" -a flush      -d "flush sessions"
+complete -c ferment -n "__fish_use_subcommand" -a pause      -d "pause sessions"
+complete -c ferment -n "__fish_use_subcommand" -a resume     -d "resume sessions"
+complete -c ferment -n "__fish_use_subcommand" -a reset      -d "reset sessions"
+complete -c ferment -n "__fish_use_subcommand" -a pick       -d "fzf-pick a session"
+complete -c ferment -n "__fish_use_subcommand" -a edit       -d "open project file"
+complete -c ferment -n "__fish_use_subcommand" -a path       -d "print project file path"
+complete -c ferment -n "__fish_use_subcommand" -a daemon     -d "daemon status"
+complete -c ferment -n "__fish_use_subcommand" -a completion -d "print completion script"
+
+function __ferment_sessions
+    if command -v mutagen >/dev/null
+        mutagen sync list --template '{{range .}}{{.Name}}
+{{end}}' 2>/dev/null
+    end
+end
+
+complete -c ferment \
+    -n "__fish_seen_subcommand_from flush f sync pause resume reset why long detail mon monitor" \
+    -a "(__ferment_sessions)"
+
+complete -c ferment -n "__fish_seen_subcommand_from completion" -a bash -d "Bash"
+complete -c ferment -n "__fish_seen_subcommand_from completion" -a zsh  -d "Zsh"
+complete -c ferment -n "__fish_seen_subcommand_from completion" -a fish -d "Fish"
+__FERMENT_FISH_COMPLETION__
+      ;;
+    "")  err "missing shell name (bash|zsh|fish)" ;;
+    *)   err "unsupported shell: $shell (use bash|zsh|fish)" ;;
+  esac
 }
 
 # ---------- dispatch ----------
 
+# Strip global flags (`-v`/`--verbose`) from arbitrary positions so they
+# work both before and after the subcommand. Anything else is preserved.
+_rest=()
+for _arg in "$@"; do
+  case "$_arg" in
+    -v|--verbose) VERBOSE=1 ;;
+    *) _rest+=("$_arg") ;;
+  esac
+done
+set -- ${_rest[@]+"${_rest[@]}"}
+unset _rest _arg
+
 sub="${1:-help}"
 shift || true
+
+# Subcommands that must not require mutagen on PATH (so users can set up
+# completions before installing mutagen).
+case "$sub" in
+  help|-h|--help|""|version|-V|--version|init|completion|path|edit|e) ;;
+  *) need mutagen ;;
+esac
 
 case "$sub" in
   help|-h|--help|"")             cmd_help ;;
@@ -311,5 +548,6 @@ case "$sub" in
   edit|e)                        cmd_edit ;;
   path)                          cmd_path ;;
   daemon)                        cmd_daemon ;;
+  completion)                    cmd_completion "$@" ;;
   *) err "unknown subcommand: $sub  (try '${SELF} help')" ;;
 esac

@@ -1,34 +1,55 @@
 # bash completion for ferment
 # Install:
-#   - Homebrew: handled by formula (bash_completion.install ...)
-#   - Manual:   place at /usr/local/etc/bash_completion.d/ferment
-#               or source from .bashrc
+#   ferment completion bash > ~/.local/share/bash-completion/completions/ferment
+# or
+#   source <(ferment completion bash)
 
 _ferment() {
   local cur prev words cword
-  _init_completion 2>/dev/null || {
+  if declare -F _init_completion >/dev/null 2>&1; then
+    _init_completion || return
+  else
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-  }
+    words=("${COMP_WORDS[@]}")
+    cword=$COMP_CWORD
+  fi
 
-  local subcmds="help version init up start down stop reload restart \
-    st status ls list watch mon monitor why long \
-    flush pause resume reset pick edit path daemon"
+  local subcmds="help version init up down reload st watch mon why \
+flush pause resume reset pick edit path daemon completion"
+  local global_flags="-v --verbose -h --help -V --version"
 
-  if [ "$COMP_CWORD" -eq 1 ]; then
-    COMPREPLY=( $(compgen -W "$subcmds" -- "$cur") )
+  # Walk all words before the cursor and pick the first non-flag token as
+  # the subcommand. This makes `-v` etc. positionally independent.
+  local sub="" i
+  for (( i=1; i<cword; i++ )); do
+    case "${words[i]}" in
+      -v|--verbose|-h|--help|-V|--version) continue ;;
+      -*) continue ;;
+      *) sub="${words[i]}"; break ;;
+    esac
+  done
+
+  if [ -z "$sub" ]; then
+    case "$cur" in
+      -*) COMPREPLY=( $(compgen -W "$global_flags" -- "$cur") ) ;;
+      *)  COMPREPLY=( $(compgen -W "$subcmds" -- "$cur") ) ;;
+    esac
     return 0
   fi
 
-  case "${COMP_WORDS[1]}" in
-    flush|pause|resume|reset|why|long)
+  case "$sub" in
+    flush|f|sync|pause|resume|reset|why|long|detail|mon|monitor)
       if command -v mutagen >/dev/null 2>&1; then
         local sessions
         sessions=$(mutagen sync list --template '{{range .}}{{.Name}}
 {{end}}' 2>/dev/null)
         COMPREPLY=( $(compgen -W "$sessions" -- "$cur") )
       fi
+      ;;
+    completion)
+      COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
       ;;
   esac
 }

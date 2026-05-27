@@ -36,7 +36,19 @@ smoke:
     @PATH="$(pwd)/.stub:$PATH" ./bin/ferment help > /dev/null && echo "✓ help"
     @PATH="$(pwd)/.stub:$PATH" ./bin/ferment unknown 2>&1 | grep -q "unknown subcommand" && echo "✓ unknown subcommand handled"
     @PATH="$(pwd)/.stub:$PATH" ./bin/ferment flush > /dev/null && echo "✓ flush --all"
+    @PATH="$(pwd)/.stub:$PATH" ./bin/ferment -v flush 2>&1 | grep -q 'mutagen sync flush --all' && echo "✓ -v traces commands"
+    @./bin/ferment completion bash | grep -q '^complete -F _ferment ferment' && echo "✓ completion bash"
+    @./bin/ferment completion zsh  | grep -q '^#compdef ferment'             && echo "✓ completion zsh"
+    @./bin/ferment completion fish | grep -q '^complete -c ferment'          && echo "✓ completion fish"
     @rm -rf .stub
+
+# Regenerate static completion files from the source of truth (bin/ferment).
+# Run after editing the embedded completion heredocs.
+regen-completions:
+    ./bin/ferment completion bash > completions/ferment.bash
+    ./bin/ferment completion zsh  > completions/_ferment
+    ./bin/ferment completion fish > completions/ferment.fish
+    @echo "✓ regenerated completions/"
 
 # Print the release-prep checklist for the current VERSION
 release-prep:
