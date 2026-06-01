@@ -12,7 +12,7 @@ complete -c ferment -s V -l version -d "Show version"
 # Subcommand suggestions when none seen yet
 complete -c ferment -n "__fish_use_subcommand" -a help       -d "show help"
 complete -c ferment -n "__fish_use_subcommand" -a version    -d "show version"
-complete -c ferment -n "__fish_use_subcommand" -a init       -d "create ferment.yml template"
+complete -c ferment -n "__fish_use_subcommand" -a init       -d "create mutagen.yml template"
 complete -c ferment -n "__fish_use_subcommand" -a up         -d "start project"
 complete -c ferment -n "__fish_use_subcommand" -a down       -d "terminate project"
 complete -c ferment -n "__fish_use_subcommand" -a reload     -d "down then up"

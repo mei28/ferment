@@ -12,7 +12,7 @@ _ferment() {
   local -a subcmds=(
     'help:show help'
     'version:show version'
-    'init:create ferment.yml template in cwd'
+    'init:create mutagen.yml template in cwd'
     'up:start project (mutagen project start)'
     'down:terminate project'
     'reload:down then up'

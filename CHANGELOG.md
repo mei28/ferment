@@ -6,6 +6,14 @@ the project tries to follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING**: standardize on Mutagen's native project file. `init` now
+  generates `mutagen.yml` (was `ferment.yml`), and discovery looks only
+  for `mutagen.yml` / `mutagen.yaml`. `ferment.yml` / `ferment.yaml` are
+  no longer recognized — rename any existing `ferment.yml` to
+  `mutagen.yml`. `up` / `down` now rely on `mutagen project`'s
+  auto-discovery and no longer pass `--project-file`.
+
 ### Added
 - `uninstall.sh` — counterpart to `install.sh`. Scans well-known prefixes
   (`FERMENT_PREFIX`, `~/.local/bin`, `~/bin`, `/usr/local/bin`, and

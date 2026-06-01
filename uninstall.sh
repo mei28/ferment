@@ -19,7 +19,7 @@
 #
 # What this script deliberately does NOT touch:
 #   - `mutagen` itself (it is a dependency, not part of ferment)
-#   - any `ferment.yml` / `mutagen.yml` files in your projects (your data)
+#   - any `mutagen.yml` files in your projects (your data)
 #   - Homebrew / nix installs (see the post-script hints)
 
 set -eu
@@ -148,5 +148,5 @@ cat <<EOF
 
 ${B}Notes:${R}
   - mutagen was not touched (uninstall separately if you no longer need it).
-  - Your project files (ferment.yml / mutagen.yml) are untouched.
+  - Your project files (mutagen.yml) are untouched.
 EOF

@@ -8,7 +8,7 @@
 `mutagen project ...` が長く、状態確認も読みにくいです。`ferment` は次の 3 つを
 1 つにまとめます。
 
-1. **公式の Project 機能** (`ferment.yml` / `mutagen.yml`) を前提にして、
+1. **公式の Project 機能** (`mutagen.yml`) を前提にして、
    プロジェクトごとの設定をファイルに固定 — `cd && ferment up` だけになる
 2. **短いサブコマンド** — `ferment up` / `down` / `st` / `flush`
 3. **色付き 1 行ステータスサマリ** — 接続・同期状態・コンフリクト数を
@@ -72,7 +72,7 @@ brew install ferment
 
 ```sh
 cd ~/projects/myproj
-ferment init             # ./ferment.yml のひな形を生成
+ferment init             # ./mutagen.yml のひな形を生成
 ferment edit             # alpha/beta を実環境に書き換える
 ferment up               # 全 sync を起動
 ferment st               # 1 行サマリ
@@ -102,7 +102,7 @@ myproj-assets           ✓   ✗   Disconnected          0    1    ./assets <->
 
 | コマンド | 中身 |
 |---|---|
-| `ferment init [name]` | `ferment.yml` のひな形を生成 |
+| `ferment init [name]` | `mutagen.yml` のひな形を生成 |
 | `ferment up` / `start` | `mutagen project start` |
 | `ferment down` / `stop` | `mutagen project terminate` |
 | `ferment reload` | down → up |
@@ -160,7 +160,7 @@ ferment completion fish > ~/.config/fish/completions/ferment.fish
 
 ```sh
 # プロジェクトの .envrc
-if [ -f ferment.yml ] || [ -f mutagen.yml ]; then
+if [ -f mutagen.yml ]; then
   ferment up 2>/dev/null || true
 fi
 ```

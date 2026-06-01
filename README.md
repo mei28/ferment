@@ -9,7 +9,7 @@
 output is hard to scan. `ferment` wraps that with three things:
 
 1. **Project-file first.** Builds on top of `mutagen project` so each
-   project's sync setup lives in a `ferment.yml` (or `mutagen.yml`).
+   project's sync setup lives in a `mutagen.yml`.
    Switching projects becomes `cd && ferment up`.
 2. **Short subcommands.** `ferment up` / `down` / `st` / `flush` instead
    of the long mutagen incantations.
@@ -74,7 +74,7 @@ After that, `brew update && brew upgrade` keeps it fresh.
 
 ```sh
 cd ~/projects/myproj
-ferment init             # generate ./ferment.yml
+ferment init             # generate ./mutagen.yml
 ferment edit             # edit alpha/beta for your environment
 ferment up               # start all syncs declared in the project file
 ferment st               # one-line color summary
@@ -101,7 +101,7 @@ myproj-assets           ✓   ✗   Disconnected          0    1    ./assets <->
 
 | Command | What it does |
 |---|---|
-| `ferment init [name]` | generate a `ferment.yml` template |
+| `ferment init [name]` | generate a `mutagen.yml` template |
 | `ferment up` / `start` | `mutagen project start` |
 | `ferment down` / `stop` | `mutagen project terminate` |
 | `ferment reload` | `down` then `up` |
@@ -163,7 +163,7 @@ Auto-start the project when entering its directory:
 
 ```sh
 # .envrc
-if [ -f ferment.yml ] || [ -f mutagen.yml ]; then
+if [ -f mutagen.yml ]; then
   ferment up 2>/dev/null || true
 fi
 ```

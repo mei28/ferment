@@ -1,6 +1,6 @@
-# ferment project file (example)
-# Drop this into your project root as `ferment.yml`.
-# Compatible with `mutagen project` — the schema is Mutagen's.
+# Mutagen project file (example)
+# Drop this into your project root as `mutagen.yml`.
+# This is a plain `mutagen project` file — ferment adds no custom schema.
 #
 #   ferment up      # start all syncs below
 #   ferment st      # 1-line color summary

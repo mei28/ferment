@@ -41,7 +41,7 @@ class Ferment < Formula
       cd dir do
         # mutagen is on PATH (declared dependency)
         system bin/"ferment", "init", "test-proj"
-        assert_predicate Pathname.new("ferment.yml"), :exist?
+        assert_predicate Pathname.new("mutagen.yml"), :exist?
       end
     end
   end

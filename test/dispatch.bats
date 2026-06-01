@@ -49,33 +49,26 @@ last_call() {
   [[ "$output" == *"no project file"* ]]
 }
 
-@test "up forwards --project-file for ferment.yml" {
-  run_ferment init demo
-  [ "$status" -eq 0 ]
-
-  run_ferment up
-  [ "$status" -eq 0 ]
-  grep -q "project start --project-file ferment.yml" "$STUB_MUTAGEN_LOG"
-}
-
-@test "up omits --project-file when mutagen.yml is present" {
+@test "up relies on mutagen auto-discovery (no --project-file)" {
   : > mutagen.yml
   run_ferment up
   [ "$status" -eq 0 ]
   grep -q "^project start$" "$STUB_MUTAGEN_LOG"
 }
 
-@test "down forwards terminate (no project file -> no flag)" {
+@test "up after init starts via auto-discovery" {
+  run_ferment init demo
+  [ "$status" -eq 0 ]
+
+  run_ferment up
+  [ "$status" -eq 0 ]
+  grep -q "^project start$" "$STUB_MUTAGEN_LOG"
+}
+
+@test "down delegates to terminate (auto-discovery, no flag)" {
   run_ferment down
   [ "$status" -eq 0 ]
   grep -q "^project terminate$" "$STUB_MUTAGEN_LOG"
-}
-
-@test "down forwards --project-file for ferment.yml" {
-  run_ferment init demo
-  run_ferment down
-  [ "$status" -eq 0 ]
-  grep -q "project terminate --project-file ferment.yml" "$STUB_MUTAGEN_LOG"
 }
 
 @test "why forwards --long and any extra args" {
