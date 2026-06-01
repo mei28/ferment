@@ -7,3 +7,4 @@ result-*
 /dist/
 docs
 .claude/settings.local.json
+.bonsai/
